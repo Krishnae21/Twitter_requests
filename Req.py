@@ -1,7 +1,10 @@
 import requests
 import sys
 import uuid
-
+import typing
+from moviepy.editor import VideoFileClip
+import os
+import json
 
 class Account:
     # Status:
@@ -14,6 +17,7 @@ class Account:
         self.cookies: dict = {}
         self.status: int = 0
         self.add_cookies(cookies)
+
 
     def add_cookies(self, cookies: dict) -> dict:
         # Проверка куки на наличие токенов
@@ -203,3 +207,99 @@ class TwitRequests:
                 + cursor
                 + '","querySource":"recent_search_click","product":"Latest"}&features={"rweb_lists_timeline_redesign_enabled":true,"responsive_web_graphql_exclude_directive_enabled":true,"verified_phone_label_enabled":false,"creator_subscriptions_tweet_preview_api_enabled":true,"responsive_web_graphql_timeline_navigation_enabled":true,"responsive_web_graphql_skip_user_profile_image_extensions_enabled":false,"tweetypie_unmention_optimization_enabled":true,"responsive_web_edit_tweet_api_enabled":true,"graphql_is_translatable_rweb_tweet_is_translatable_enabled":true,"view_counts_everywhere_api_enabled":true,"longform_notetweets_consumption_enabled":true,"responsive_web_twitter_article_tweet_consumption_enabled":false,"tweet_awards_web_tipping_enabled":false,"freedom_of_speech_not_reach_fetch_enabled":true,"standardized_nudges_misinfo":true,"tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled":true,"longform_notetweets_rich_text_read_enabled":true,"longform_notetweets_inline_media_enabled":true,"responsive_web_media_download_video_enabled":false,"responsive_web_enhance_cards_enabled":false}&fieldToggles={"withAuxiliaryUserLabels":false,"withArticleRichContentState":false}'
         )
+
+class TwitStatic:
+    pass
+
+
+class TwitMethods:
+    @staticmethod
+    def cookies_check(cookies: dict, proxy: str = None) -> dict:
+        if cookies.get('ct0') and cookies.get('auth_token'):
+            valid = TwitMethods.valid_check(cookies, proxy)
+            if valid == 1:
+                return {"status": True, "message": "", "code": 0}
+            elif valid == 2:
+                return {"status": False, "message": "Account is blocked", "code": 2}
+            elif valid == 3:
+                return {"status": False, "message": "", "code": 3}
+        else:
+            return {"status": False, "message": "Not found Cookies", "code": 1}
+
+    @staticmethod
+    def valid_check(cookies: dict, proxy: str = None):
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.199 Safari/537.36",
+            "Accept": "*/*",
+            "Referer": "https://twitter.com",
+            "Authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+            "X-Csrf-Token": cookies.get("ct0"),
+            "X-Twitter-Active-User": "yes",
+            "X-Twitter-Client-Language": "en",
+        }
+        if proxy:
+            proxy = {
+            'http': f'socks5://{proxy}',
+            'https': f'socks5://{proxy}'
+        }
+        url: str = "https://twitter.com/i/api/1.1/branch/init.json"
+        response = requests.post(
+            url, cookies=cookies, headers=headers, json={}, proxies=proxy
+        )
+        if response.status_code == 403:
+            # Блок
+            return 2
+        elif response.status_code == 200:
+            # Валид
+            return 1
+        else:
+            print(response)
+            return 3
+
+
+    @staticmethod
+    def movie_duration(filepath: str):
+        clip = VideoFileClip(filepath)
+        return clip.duration * 1000
+
+    @staticmethod
+    def movie_size(filepath: str):
+        return os.stat(filepath).st_size
+
+    @staticmethod
+    def proxy(proxy: str):
+        if proxy:
+            proxy = {
+            'http': f'socks5://{proxy}',
+            'https': f'socks5://{proxy}'
+            }
+        return proxy
+
+class UploadFile:
+    @staticmethod
+    def upload_file(cookies: dict, filepath: str, proxy: str):
+        duration = TwitMethods.movie_duration(filepath)
+        size = TwitMethods.movie_size(filepath)
+        proxy = TwitMethods.proxy(proxy)
+        return UploadFile.load_init(cookies, proxy, size, duration)
+
+    @staticmethod
+    def load_init(cookies: dict, proxy: str, size: int, duration: float):
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.199 Safari/537.36",
+            "Accept": "*/*",
+            "Referer": "https://twitter.com",
+            "Authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+            "X-Csrf-Token": cookies.get("ct0"),
+            "X-Twitter-Active-User": "yes",
+            "X-Twitter-Client-Language": "en",
+        }
+        url = "https://upload.twitter.com/i/media/upload.json"
+        data = {"command": "INIT", "total_bytes": size, "media_type": "video/mp4", "video_duration_ms": duration,
+                "media_category": "tweet_video"}
+        res = requests.post(url, data=data, params=data, proxies=proxy, cookies=cookies, headers=headers)
+        if res.status_code == 202:
+            response = json.loads(res.text)
+            return {"status": True, "id": response.get("media_id")}
+        else:
+            return {"status": False}
